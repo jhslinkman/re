@@ -75,6 +75,7 @@ func makeReviewTemplate(ctx context.Context, n int) string {
 	var showWg sync.WaitGroup
 	wg.Add(6)
 	showWg.Add(2)
+
 	var pr *github.PullRequest
 	go func() {
 		start := time.Now()
@@ -87,6 +88,7 @@ func makeReviewTemplate(ctx context.Context, n int) string {
 		wg.Done()
 		log.Printf("Fetched pr in %v", time.Now().Sub(start))
 	}()
+
 	reviews := make([]*github.PullRequestReview, 0, 10)
 	go func() {
 		start := time.Now()
@@ -106,10 +108,11 @@ func makeReviewTemplate(ctx context.Context, n int) string {
 		}
 		wg.Done()
 		log.Printf("Fetched reviews in %v", time.Now().Sub(start))
-	}()
+		}()
+
 	go func() {
 		start := time.Now()
-		repoURL := fmt.Sprintf("https://github.com/%s/%s", projectOwner, projectRepo)
+		repoURL := fmt.Sprintf("git@github.com:%s/%s", projectOwner, projectRepo)
 		cmd := exec.Command("git", "fetch", "-f", repoURL, "master", fmt.Sprintf("refs/pull/%d/head:refs/reviews/%d", n, n))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -120,6 +123,7 @@ func makeReviewTemplate(ctx context.Context, n int) string {
 		wg.Done()
 		log.Printf("Fetched refs in %v", time.Now().Sub(start))
 	}()
+
 	diffBuf := bytes.NewBuffer(make([]byte, 0, 1024))
 	go func() {
 		// Can't show until fetch is performed and PR is fetched.
@@ -133,6 +137,7 @@ func makeReviewTemplate(ctx context.Context, n int) string {
 		wg.Done()
 		log.Printf("Showed diffs in %v", time.Now().Sub(start))
 	}()
+
 	issueComments := make([]*github.IssueComment, 0, 10)
 	go func() {
 		start := time.Now()
@@ -155,6 +160,7 @@ func makeReviewTemplate(ctx context.Context, n int) string {
 		log.Printf("Fetched issue comments in %v", time.Now().Sub(start))
 		wg.Done()
 	}()
+
 	reviewComments := make(commitComments)
 	go func() {
 		start := time.Now()

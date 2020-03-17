@@ -13,25 +13,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
 
 var (
-	project      = flag.String("p", "cockroachdb/cockroach", "GitHub owner/repo name")
+	project      = flag.String("p", "", "GitHub owner/repo name")
 	resume       = flag.String("resume", "", "resume review from `file`")
 	tokenFile    = flag.String("token", "", "read GitHub token personal access token from `file` (default $HOME/.github-issue-token)")
+	// TODO: Global?!
 	projectOwner = ""
 	projectRepo  = ""
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `usage: re [-p owner/repo] [-resume file] pr-number
+	fmt.Fprintf(os.Stderr, `usage: re [-p owner/repo] [-resume file] [pr-number]
 
 `)
 	flag.PrintDefaults()
@@ -44,11 +45,12 @@ func main() {
 	q := strings.Join(flag.Args(), " ")
 
 	f := strings.Split(*project, "/")
-	if len(f) != 2 {
-		log.Fatal("invalid form for -p argument: must be owner/repo, like golang/go")
+	if len(f) > 0 {
+		projectOwner = f[0]
 	}
-	projectOwner = f[0]
-	projectRepo = f[1]
+	if len(f) > 1 {
+		projectRepo = f[1]
+	}
 
 	loadAuth()
 
@@ -67,34 +69,34 @@ func main() {
 		postComments(ctx, n, request)
 	} else {
 		user := loadUser()
-		mine, others, err := searchPRs(ctx, user)
+		p := searchParams{
+			user: user,
+		}
+		fmt.Println(projectRepo)
+		mine, others, err := searchPRs(ctx, p)
 		if err != nil {
 			log.Fatal(err)
 		}
-		color.HiWhite("Created by me:")
 		printIssues(mine)
-		fmt.Println()
-		color.HiWhite("Involving me:")
 		printIssues(others)
+	}
+	}
+
+func printIssues(issues []*github.Issue) {
+	for _, issue := range issues {
+		fmt.Printf(
+			"%s - %s - %s\n",
+			getUserLogin(issue.User),
+			getIssueFromURL(issue.URL),
+			getString(issue.Title),
+		)
 	}
 }
 
-func printIssues(issues []*github.Issue) {
-	usernameLength := 10
-	for _, issue := range issues {
-		curLen := len(getUserLogin(issue.User))
-		if curLen > usernameLength {
-			usernameLength = curLen
-		}
-	}
-	for _, issue := range issues {
-		c := color.GreenString
-		if getString(issue.State) == "closed" {
-			c = color.RedString
-		}
-		fmt.Printf("%5s  %-"+strconv.Itoa(usernameLength+1)+"s %s\n",
-			c("%d", getInt(issue.Number)), getUserLogin(issue.User), getString(issue.Title))
-	}
+func getIssueFromURL(url *string) string {
+	re := regexp.MustCompile(`repos/(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>[0-9]+)`)
+	matches := re.FindStringSubmatch(getString(url))
+	return matches[1] + "/" + matches[2] + "#" + matches[3]
 }
 
 func postComments(ctx context.Context, pr int, review *github.PullRequestReviewRequest) error {
